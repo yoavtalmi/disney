@@ -1,4 +1,6 @@
 faiss-cpu
-pandas
+flask
+openai
+python-dotenv
 selenium
 sentence-transformers
