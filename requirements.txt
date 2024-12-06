@@ -1,1 +1,4 @@
+faiss-cpu
+pandas
 selenium
+sentence-transformers
