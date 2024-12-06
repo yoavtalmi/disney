@@ -7,6 +7,7 @@ import faiss
 from multiprocessing import Pool
 import time
 
+from disney_contants import DisneyConstants
 
 # Initialize FAISS with IndexIDMap to support custom IDs
 dim = 384  # Dimensionality of the embeddings
@@ -14,7 +15,7 @@ base_index = faiss.IndexFlatL2(dim)  # Base index
 index = faiss.IndexIDMap(base_index)  # Add ID mapping functionality
 
 # Load the model
-model = SentenceTransformer('all-MiniLM-L6-v2')
+model = SentenceTransformer(DisneyConstants.SIMILARITY_MODEL)
 
 
 def timer(func):
@@ -35,12 +36,12 @@ def clean_data(chunk: pd.DataFrame) -> pd.DataFrame:
     :param chunk: pd.DataFrame with columns 'question' and 'answer'
     :return: cleaned pd.DataFrame
     """
-    chunk.drop_duplicates(subset=["question", "answer"], inplace=True, keep='last')
+    chunk.drop_duplicates(subset=[DisneyConstants.QUESTION, DisneyConstants.ANSWER], inplace=True, keep='last')
     chunk.dropna(inplace=True)
-    chunk = chunk[(chunk["question"].str.len() > 10) &
-                  (chunk["answer"].str.len() > 10) &
-                  (chunk["question"].str.len() < 3000) &
-                  (chunk["answer"].str.len() < 3000)]
+    chunk = chunk[(chunk[DisneyConstants.QUESTION].str.len() > DisneyConstants.MAXIMUM_QUESTION_LENGTH) &
+                  (chunk[DisneyConstants.ANSWER].str.len() > DisneyConstants.MINIMUM_ANSWER_LENGTH) &
+                  (chunk[DisneyConstants.QUESTION].str.len() < DisneyConstants.MAXIMUM_QUESTION_LENGTH) &
+                  (chunk[DisneyConstants.ANSWER].str.len() < DisneyConstants.MINIMUM_ANSWER_LENGTH)]
     chunk.reset_index(drop=True, inplace=True)
     return chunk
 
@@ -52,7 +53,7 @@ def vectorize_data(data: pd.DataFrame) -> np.array:
     :param data: pd.DataFrame with a 'question' column
     :return: embeddings as a np.array
     """
-    questions = data['question'].tolist()
+    questions = data[DisneyConstants.QUESTION].tolist()
     vectors = model.encode(questions, batch_size=32)
     return vectors
 
@@ -75,7 +76,7 @@ def process_chunk(chunk: pd.DataFrame) -> tuple:
     faiss_ids = [int(random.randint(-(2**63), 2**63 - 1)) for _ in range(len(cleaned_chunk))]
 
     # Convert SQL IDs to native Python int
-    sql_ids = [int(id) for id in cleaned_chunk['id'].to_numpy()]
+    sql_ids = [int(id) for id in cleaned_chunk[DisneyConstants.ID].to_numpy()]
 
     end_time = time.time()
     print(f"process_chunk took {end_time - start_time:.2f} seconds")
@@ -105,7 +106,8 @@ def parallel_process_chunks(chunks: pd.DataFrame, num_workers: int = 4):
 
 
 @timer
-def save_mapping_table(faiss_ids: list, sql_ids: list, db_path: str, mapping_table_name: str = "faiss_mapping"):
+def save_mapping_table(faiss_ids: list, sql_ids: list, db_path: str,
+                       mapping_table_name: str = DisneyConstants.FAISS_MAPPING_TABLE):
     """
     Save the mapping table to a SQLite database.
     :param faiss_ids: list of FAISS IDs
@@ -167,10 +169,10 @@ def process_and_store_faiss(db_path: str, table_name: str, faiss_index_path: str
 
 if __name__ == "__main__":
     process_and_store_faiss(
-        db_path="../data/disney_faq.db",
-        table_name="faq",
-        faiss_index_path="../data/faq_index.faiss",
-        chunksize=500,
-        num_workers=4
+        db_path=DisneyConstants.SQL_DB,
+        table_name=DisneyConstants.SQL_TABLE,
+        faiss_index_path=DisneyConstants.FAISS_INDEX,
+        chunksize=DisneyConstants.CHUNCK_SIZE,
+        num_workers=DisneyConstants.NUMBER_OF_WORKERS
     )
 

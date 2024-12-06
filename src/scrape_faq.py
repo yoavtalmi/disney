@@ -7,6 +7,8 @@ import sqlite3
 import time
 import logging
 
+from disney_contants import DisneyConstants
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -31,7 +33,7 @@ def get_faq_page() -> webdriver:
     :return: Driver instance
     """
     driver = webdriver.Chrome()
-    url = 'https://disneyworld.disney.go.com/faq/'
+    url = DisneyConstants.FAQ_URL
     driver.get(url)
     time.sleep(1)
     return driver
@@ -46,7 +48,7 @@ def get_faq_categories_dict(driver: webdriver) -> dict:
     """
     try:
         faq_section = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "help-content"))
+            EC.presence_of_element_located((By.CLASS_NAME, DisneyConstants.FAQ_SECTION_CLASS))
         )
         category_links = faq_section.find_elements(By.TAG_NAME, "a")
         faq_categories = {}
@@ -54,7 +56,7 @@ def get_faq_categories_dict(driver: webdriver) -> dict:
             category_href = link.get_attribute("href")
             try:
                 category_div = link.find_element(By.TAG_NAME, "div")
-                category_title = category_div.get_attribute("textContent").strip()
+                category_title = category_div.get_attribute(DisneyConstants.TEXT_CONTENT_ATTRIBUTE).strip()
             except:
                 category_title = None
             if category_title and category_href:
@@ -77,9 +79,9 @@ def extract_question_links(category_url: str, driver: webdriver) -> list:
     logging.info(f"Extracting question links from category: {category_url}")
     driver.get(category_url)
     question_list = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.CLASS_NAME, "help-question-list__list"))
+        EC.presence_of_element_located((By.CLASS_NAME, DisneyConstants.QUESTION_LIST_CLASS))
     )
-    question_links = question_list.find_elements(By.CLASS_NAME, "help-question-item__link")
+    question_links = question_list.find_elements(By.CLASS_NAME, DisneyConstants.QUESTION_CLASS)
     links = [link.get_attribute("href") for link in question_links if link.get_attribute("href")]
     return links
 
@@ -96,9 +98,9 @@ def extract_question_and_answer(question_url: str, driver: webdriver) -> tuple:
     try:
         driver.get(question_url)
         question = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "help-question__text--question"))
+            EC.presence_of_element_located((By.CLASS_NAME, DisneyConstants.QUESTION_TEXT_CLASS))
         ).text
-        answer_parts = driver.find_elements(By.CLASS_NAME, "help-question__text--answer")
+        answer_parts = driver.find_elements(By.CLASS_NAME, DisneyConstants.ANSWER_TEXT_CLASS)
         answer = "\n".join([part.text for part in answer_parts])
     except Exception as e:
         logging.error(f"An error occurred with question {question_url}: {e}")
@@ -118,14 +120,15 @@ def get_questions_dicts(faq_categories: dict) -> list:
     options.add_argument("--disable-notifications")
     driver = webdriver.Chrome(options=options)
     for category, link in faq_categories.items():
-        if category == 'Technology & Privacy':
+        if category == DisneyConstants.TECHNOLOGY_AND_PRIVACY:
             continue
         questions = extract_question_links(link, driver)
         for question in questions:
-            if 'disabilities' in question:
+            if DisneyConstants.DISABILITIES in question:
                 continue
             q, a = extract_question_and_answer(question, driver)
-            questions_dicts.append({"category": category, "question": q, "answer": a})
+            questions_dicts.append({DisneyConstants.CATEGORY: category, DisneyConstants.QUESTION: q,
+                                    DisneyConstants.ANSWER: a})
     driver.quit()
     return questions_dicts
 
@@ -137,10 +140,10 @@ def create_db(questions_dicts: list):
     :param questions_dicts: list, list of dictionaries containing questions and answers
     :return:
     """
-    conn = sqlite3.connect('../data/disney_faq.db')
+    conn = sqlite3.connect(DisneyConstants.SQL_DB)
     cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS faq (
+    cursor.execute(f"""
+    CREATE TABLE IF NOT EXISTS {DisneyConstants.SQL_TABLE} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         category TEXT,
         question TEXT,
@@ -148,12 +151,12 @@ def create_db(questions_dicts: list):
     )
     """)
     for record in questions_dicts:
-        if record['question'] is None or record['answer'] is None:
+        if record[DisneyConstants.QUESTION] is None or record[DisneyConstants.ANSWER] is None:
             continue
         cursor.execute("""
         INSERT INTO faq (category, question, answer)
         VALUES (?, ?, ?)
-        """, (record['category'], record['question'], record['answer']))
+        """, (record[DisneyConstants.CATEGORY], record[DisneyConstants.QUESTION], record[DisneyConstants.ANSWER]))
     conn.commit()
     conn.close()
 
