@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 import pandas as pd
 import random
@@ -9,8 +10,11 @@ import time
 
 from disney_contants import DisneyConstants
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 # Initialize FAISS with IndexIDMap to support custom IDs
-dim = 384  # Dimensionality of the embeddings
+dim = DisneyConstants.SIMILARITY_MODEL_DIM  # Dimensionality of the embeddings
 base_index = faiss.IndexFlatL2(dim)  # Base index
 index = faiss.IndexIDMap(base_index)  # Add ID mapping functionality
 
@@ -24,7 +28,7 @@ def timer(func):
         start_time = time.time()
         result = func(*args, **kwargs)
         end_time = time.time()
-        print(f"{func.__name__} took {end_time - start_time:.2f} seconds")
+        logging.info(f"Function '{func.__name__}' executed in {end_time - start_time:.2f} seconds")
         return result
     return wrapper
 
@@ -38,10 +42,10 @@ def clean_data(chunk: pd.DataFrame) -> pd.DataFrame:
     """
     chunk.drop_duplicates(subset=[DisneyConstants.QUESTION, DisneyConstants.ANSWER], inplace=True, keep='last')
     chunk.dropna(inplace=True)
-    chunk = chunk[(chunk[DisneyConstants.QUESTION].str.len() > DisneyConstants.MAXIMUM_QUESTION_LENGTH) &
-                  (chunk[DisneyConstants.ANSWER].str.len() > DisneyConstants.MINIMUM_ANSWER_LENGTH) &
+    chunk = chunk[(chunk[DisneyConstants.QUESTION].str.len() > DisneyConstants.MINIMUM_QUESTION_LENGTH) &
                   (chunk[DisneyConstants.QUESTION].str.len() < DisneyConstants.MAXIMUM_QUESTION_LENGTH) &
-                  (chunk[DisneyConstants.ANSWER].str.len() < DisneyConstants.MINIMUM_ANSWER_LENGTH)]
+                  (chunk[DisneyConstants.ANSWER].str.len() > DisneyConstants.MINIMUM_ANSWER_LENGTH) &
+                  (chunk[DisneyConstants.ANSWER].str.len() < DisneyConstants.MAXIMUM_ANSWER_LENGTH)]
     chunk.reset_index(drop=True, inplace=True)
     return chunk
 
@@ -79,7 +83,7 @@ def process_chunk(chunk: pd.DataFrame) -> tuple:
     sql_ids = [int(id) for id in cleaned_chunk[DisneyConstants.ID].to_numpy()]
 
     end_time = time.time()
-    print(f"process_chunk took {end_time - start_time:.2f} seconds")
+    logging.info(f"process_chunk took {end_time - start_time:.2f} seconds")
     return faiss_ids, sql_ids, vectors
 
 
@@ -101,7 +105,7 @@ def parallel_process_chunks(chunks: pd.DataFrame, num_workers: int = 4):
     all_vectors = np.vstack([result[2] for result in results])
 
     end_time = time.time()
-    print(f"parallel_process_chunks took {end_time - start_time:.2f} seconds")
+    logging.info(f"parallel_process_chunks took {end_time - start_time:.2f} seconds")
     return all_faiss_ids, all_sql_ids, all_vectors
 
 
@@ -135,7 +139,7 @@ def save_mapping_table(faiss_ids: list, sql_ids: list, db_path: str,
 
     conn.commit()
     conn.close()
-    print(f"Mapping table '{mapping_table_name}' saved to {db_path}")
+    logging.info(f"Mapping table '{mapping_table_name}' saved to {db_path}")
 
 
 @timer
@@ -160,7 +164,7 @@ def process_and_store_faiss(db_path: str, table_name: str, faiss_index_path: str
     index.add_with_ids(all_vectors, all_faiss_ids)
 
     faiss.write_index(index, faiss_index_path)
-    print(f"FAISS index saved to {faiss_index_path}")
+    logging.info(f"FAISS index saved to {faiss_index_path}")
 
     save_mapping_table(all_faiss_ids, all_sql_ids, db_path)
 

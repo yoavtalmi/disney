@@ -1,6 +1,7 @@
 faiss-cpu
 flask
 openai
+pandas
 python-dotenv
 selenium
 sentence-transformers

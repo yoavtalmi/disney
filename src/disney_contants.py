@@ -7,9 +7,9 @@ class DisneyConstants:
     CATEGORY: str = 'category'
     CONTEXT_LIMIT: int = 10000
     CHUNCK_SIZE: int = 500
-    DISABILITIES: str = 'disabilities'
     FAISS_INDEX: str = 'data/faq_index.faiss'
     FAISS_MAPPING_TABLE: str = 'faiss_mapping'
+    FAQ: str = 'faq'
     FAQ_URL: str = 'https://disneyworld.disney.go.com/faq/'
     FAQ_SECTION_CLASS: str = 'help-content'
     ID: str = 'id'
@@ -28,6 +28,7 @@ class DisneyConstants:
     QUESTION_TEXT_CLASS: str = 'help-question__text--question'
     ANSWER_TEXT_CLASS: str = 'help-question__text--answer'
     SIMILARITY_MODEL: str = 'all-MiniLM-L6-v2'
+    SIMILARITY_MODEL_DIM: int = 384
     SIMILARITY_THRESHOLD: float = 1.2
     SQL_DB: str = 'data/disney_faq.db'
     SQL_TABLE: str = 'faq'

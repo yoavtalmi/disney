@@ -1,6 +1,8 @@
-import sqlite3
 import faiss
+import logging
 import os
+import sqlite3
+import time
 from dotenv import load_dotenv
 from functools import lru_cache
 from openai import OpenAI
@@ -8,66 +10,102 @@ from sentence_transformers import SentenceTransformer
 
 from src.disney_contants import DisneyConstants
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+
+
+def timer(func):
+    """
+    Decorator to measure execution time of a function
+    and log it.
+    """
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+
+        # Check if 'query' is in kwargs or args
+        query_info = ""
+        if 'query' in kwargs:
+            query_info = f" | query: {kwargs['query']}"
+        elif 'query' in func.__code__.co_varnames:
+            # Get the index of 'query' in the function arguments
+            query_index = func.__code__.co_varnames.index('query')
+            if len(args) > query_index:
+                query_info = f" | query: {args[query_index]}"
+
+        logging.info(
+            f"Function '{func.__name__}' executed in {end_time - start_time:.2f} seconds{query_info}"
+        )
+        return result
+
+    return wrapper
+
+
+def init_vector_model() -> SentenceTransformer:
+    """
+    Initialize the SentenceTransformer model
+    :return: SentenceTransformer
+    """
+    model = SentenceTransformer(DisneyConstants.SIMILARITY_MODEL)
+    return model
+
+
+def init_faiss_db() -> faiss.IndexFlatL2:
+    """
+    Initialize the FAISS index
+    :return:
+    """
+    index = faiss.read_index(DisneyConstants.FAISS_INDEX)
+    return index
+
+
+def init_llm_model():
+    """
+    Initialize the OpenAI language model
+    :return:
+    """
+    load_dotenv()
+    client = OpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY"),
+    )
+    return client
+
+
+def get_sqlite_connection() -> sqlite3.Connection:
+    """
+    Create a new SQLite connection.
+    """
+    return sqlite3.connect(DisneyConstants.SQL_DB)
+
 
 class QueryFAQ:
     def __init__(self):
-        self.model = self.init_vector_model()
-        self.index = self.init_faiss_db()
+        logging.info("Initializing QueryFAQ...")
+        self.model = init_vector_model()
+        self.index = init_faiss_db()
         self.k = DisneyConstants.NUMBER_OF_ANSWERS
-        self.llm_model = self.init_llm_model()
+        self.llm_model = init_llm_model()
+        logging.info("QueryFAQ initialization completed.")
 
-    @staticmethod
-    def init_vector_model() -> SentenceTransformer:
-        """
-        Initialize the SentenceTransformer model
-        :return: SentenceTransformer
-        """
-        model = SentenceTransformer(DisneyConstants.SIMILARITY_MODEL)
-        return model
-
-    @staticmethod
-    def init_faiss_db() -> faiss.IndexFlatL2:
-        """
-        Initialize the FAISS index
-        :return:
-        """
-        index = faiss.read_index(DisneyConstants.FAISS_INDEX)
-        return index
-
-    @staticmethod
-    def init_llm_model():
-        """
-        Initialize the OpenAI language model
-        :return:
-        """
-        load_dotenv()
-        client = OpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY"),  # This is the default and can be omitted
-        )
-        return client
-
-    @staticmethod
-    def get_sqlite_connection() -> sqlite3.Connection:
-        """
-        Create a new SQLite connection.
-        """
-        return sqlite3.connect(DisneyConstants.SQL_DB)
-
+    @timer
     def preprocess_query(self, query: str) -> str:
         """
         Preprocess the user query to ensure it is valid.
         :param query: str
         :return: str, preprocessed query
         """
-        # Check query length
         if len(query) < DisneyConstants.MINIMUM_QUERY_LENGTH or len(query) > DisneyConstants.MAXIMUM_QUERY_LENGTH:
             raise ValueError("Query length must be between 5 and 500 characters.")
 
-        # Normalize query
         query = query.strip().lower()
-
         return query
 
+    @timer
     def get_questions_and_distances_from_faiss(self, query: str) -> tuple:
         """
         Get the questions and distances from the FAISS index based on the query
@@ -78,19 +116,21 @@ class QueryFAQ:
         distances, faiss_ids = self.index.search(question_vector, self.k)
         return faiss_ids, distances
 
+    @timer
     def get_sql_id_from_faiss_id(self, faiss_id: int) -> int:
         """
         Get the SQL ID from the FAISS ID
         :param faiss_id: int
         :return: int
         """
-        conn = self.get_sqlite_connection()
+        conn = get_sqlite_connection()
         cursor = conn.cursor()
         cursor.execute(f"SELECT sql_id FROM {DisneyConstants.FAISS_MAPPING_TABLE} WHERE faiss_id=?", (str(faiss_id),))
         sql_id = cursor.fetchone()[0]
         return sql_id
 
     @lru_cache(maxsize=1000)
+    @timer
     def get_question_and_answer_from_db(self, question_id: int) -> tuple:
         """
         Get the question and answer from the SQLite database
@@ -98,12 +138,13 @@ class QueryFAQ:
         :param question_id: int
         :return: tuple, question and answer
         """
-        conn = self.get_sqlite_connection()
+        conn = get_sqlite_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT question, answer FROM faq WHERE id=?", (question_id,))
         question, answer = cursor.fetchone()
         return question, answer
 
+    @timer
     def get_questions_and_answer_based_on_query(self, query: str) -> list:
         """
         Get the questions and answers based on the query
@@ -120,6 +161,7 @@ class QueryFAQ:
             retrieved_answers.append({DisneyConstants.QUESTION: question, DisneyConstants.ANSWER: answer})
         return retrieved_answers
 
+    @timer
     def build_context(self, retrieved_answers, char_limit=DisneyConstants.CONTEXT_LIMIT):
         """
         Dynamically build the context by adding questions and answers until the character limit is reached.
@@ -139,6 +181,7 @@ class QueryFAQ:
 
         return context
 
+    @timer
     def get_answer_from_llm(self, query: str, context: str) -> str:
         """
         Get the answer from the LLM model
@@ -157,6 +200,7 @@ class QueryFAQ:
         )
         return response.choices[0].message.content
 
+    @timer
     def anwser_query(self, query: str) -> str:
         """
         Answer the user query
@@ -169,23 +213,5 @@ class QueryFAQ:
             return "Sorry, I don't have an answer to that question."
         context = self.build_context(questions)
         answer = self.get_answer_from_llm(query, context)
+        logging.info(f"Question: {query} | Answer: {answer}")
         return answer
-
-
-if __name__ == "__main__":
-    query_faq = QueryFAQ()
-    queries = ["What is the smoking policy at Disney Resort hotels?", "Where can I find maps of Disney parks?",
-               "How do I make dining reservations at Disney World?",
-               "What are the operating hours for Disney World parks?",
-               "Can I bring my own food into the park?",
-               "What is the history of Disney World?",
-               "Are pets allowed in Disney parks?",
-               "Does Disney offer any discounts for military personnel?",
-               "What time do the fireworks start at Disney World?",
-               "What is the policy on wearing costumes to the parks?"]
-    for query in queries:
-        answer = query_faq.f(query)
-        print(answer)
-
-
-

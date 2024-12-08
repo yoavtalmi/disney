@@ -1,5 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
@@ -32,7 +34,17 @@ def get_faq_page() -> webdriver:
     Scrape the Disney World FAQ page
     :return: Driver instance
     """
-    driver = webdriver.Chrome()
+    options = Options()
+    options.add_argument("--headless=new")  # Use the new headless mode
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-http2")  # Optional: Force HTTP/1.1 if HTTP/2 is problematic
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    )  # Simulate a real browser
+    # Point to the installed chromedriver path (default in Debian/Ubuntu systems)
+    service = Service("/usr/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=options)
     url = DisneyConstants.FAQ_URL
     driver.get(url)
     time.sleep(1)
@@ -47,9 +59,11 @@ def get_faq_categories_dict(driver: webdriver) -> dict:
     :return: A dictionary of FAQ categories
     """
     try:
+        logging.info("Waiting for the FAQ section to load...")
         faq_section = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, DisneyConstants.FAQ_SECTION_CLASS))
         )
+        logging.info("FAQ section located.")
         category_links = faq_section.find_elements(By.TAG_NAME, "a")
         faq_categories = {}
         for link in category_links:
@@ -57,13 +71,17 @@ def get_faq_categories_dict(driver: webdriver) -> dict:
             try:
                 category_div = link.find_element(By.TAG_NAME, "div")
                 category_title = category_div.get_attribute(DisneyConstants.TEXT_CONTENT_ATTRIBUTE).strip()
-            except:
+            except Exception as e:
+                logging.error(f"Error extracting category title: {e}")
                 category_title = None
-            if category_title and category_href:
+            if category_title and category_href and 'faq' in category_href:
                 faq_categories[category_title] = category_href
     except Exception as e:
         logging.error(f"An error occurred: {e}")
+        logging.info("Page source for debugging:")
+        logging.info(driver.page_source)
         faq_categories = {}
+
     driver.quit()
     return faq_categories
 
@@ -105,6 +123,9 @@ def extract_question_and_answer(question_url: str, driver: webdriver) -> tuple:
     except Exception as e:
         logging.error(f"An error occurred with question {question_url}: {e}")
         question, answer = None, None
+    except TimeoutException as e:
+        logging.error(f"Timeout occurred while loading {question_url}: {e}")
+        question, answer = None, None
     return question, answer
 
 
@@ -117,15 +138,21 @@ def get_questions_dicts(faq_categories: dict) -> list:
     """
     questions_dicts = []
     options = Options()
-    options.add_argument("--disable-notifications")
-    driver = webdriver.Chrome(options=options)
+    options.add_argument("--headless=new")  # Use the new headless mode
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-http2")  # Optional: Force HTTP/1.1 if HTTP/2 is problematic
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    )
+    # Point to the installed chromedriver path (default in Debian/Ubuntu systems)
+    service = Service("/usr/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=options)
     for category, link in faq_categories.items():
         if category == DisneyConstants.TECHNOLOGY_AND_PRIVACY:
             continue
         questions = extract_question_links(link, driver)
         for question in questions:
-            if DisneyConstants.DISABILITIES in question:
-                continue
             q, a = extract_question_and_answer(question, driver)
             questions_dicts.append({DisneyConstants.CATEGORY: category, DisneyConstants.QUESTION: q,
                                     DisneyConstants.ANSWER: a})
