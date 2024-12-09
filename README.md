@@ -55,12 +55,13 @@ disney/
 - Docker
 
 ### Installation Steps
-1. Clone the repository:
+1. This repo was sent to Disney as a zip file.
+   OR
+   Clone the repository:
    ```bash
    git clone https://github.com/yoavtalmi/disney-faq.git
    cd disney-faq
    ```
-
 
 2. Build the Docker image:
    ```bash
@@ -136,7 +137,7 @@ curl -X POST "http://127.0.0.1:8000/query" \
    - Dockerization ensures easy deployment and scaling across multiple instances.
 
 7. **Logging**:
-   - Basic logging is implemented for tracking API requests and responses, with emphasis on performance in order to track the data flow and identify potential bottlenecks.
+   - Basic logging is implemented for tracking on API requests and responses, method calls and errors, with emphasis on performance in order to track the data flow and identify potential bottlenecks.
 
 ---
 
@@ -155,10 +156,7 @@ curl -X POST "http://127.0.0.1:8000/query" \
    - Explore other embedding models and similarity metrics to improve search accuracy and relevance.
    - Explore different threshold values for similarity scores to optimize the trade-off between precision and recall
 
-4. **Enhanced Query Handling**:
-   - Introduce advanced query preprocessing and typo handling to improve search precision.
-
-5. **Monitoring and Metrics**:
+4. **Monitoring and Metrics**:
    - Add monitoring tools like Prometheus and Grafana for tracking API performance and query patterns.
    - Implement metrics for tracking the system's accuracy, speed, and cost.
    - Add tests for the API and the underlying components to ensure reliability and performance.
