@@ -51,7 +51,7 @@ def init_vector_model() -> SentenceTransformer:
     Initialize the SentenceTransformer model
     :return: SentenceTransformer
     """
-    model = SentenceTransformer(DisneyConstants.SIMILARITY_MODEL)
+    model = SentenceTransformer(os.getenv("SIMILARITY_MODEL", DisneyConstants.SIMILARITY_MODEL))
     return model
 
 
@@ -196,7 +196,7 @@ class QueryFAQ:
                             "context is not relevant, respond with 'Sorry, I don't have an answer to that question.'"},
                 {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"}
             ],
-            model=DisneyConstants.LLM_MODEL
+            model=os.getenv("LLM_MODEL", DisneyConstants.LLM_MODEL)
         )
         return response.choices[0].message.content
 

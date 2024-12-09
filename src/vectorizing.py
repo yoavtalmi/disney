@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import os
 import pandas as pd
 import random
 import numpy as np
@@ -14,12 +15,12 @@ from disney_contants import DisneyConstants
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Initialize FAISS with IndexIDMap to support custom IDs
-dim = DisneyConstants.SIMILARITY_MODEL_DIM  # Dimensionality of the embeddings
+dim = os.getenv("SIMILARITY_MODEL_DIM", DisneyConstants.SIMILARITY_MODEL_DIM)  # Dimensionality of the embeddings
 base_index = faiss.IndexFlatL2(dim)  # Base index
 index = faiss.IndexIDMap(base_index)  # Add ID mapping functionality
 
 # Load the model
-model = SentenceTransformer(DisneyConstants.SIMILARITY_MODEL)
+model = SentenceTransformer(os.getenv("SIMILARITY_MODEL", DisneyConstants.SIMILARITY_MODEL))
 
 
 def timer(func):
